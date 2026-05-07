@@ -35,17 +35,19 @@ The concepts previously discussed map directly: health checks become more thorou
 MIGs work for the stateless presentation and application tiers, but the stateful data tier often uses managed database services instead of generic instance groups. 
 Understanding 3-tier architecture gives you a mental framework for deciding where to apply horizontal scaling, auto-healing, and different health check strategies based on each tier's unique failure modes and scaling requirements.
 
-
 ---
 
 ## Runbook: Managed Instance Group Deployment (via Clickops)
+
 ### End Goal
 Deploy a Managed Instance Group (MIG) of identical VMs distributed across multiple zones in the `europe-west2 (London)` region. This will be done with autoscaling (3-10 instances) and auto-healing.
+
 ### Prerequisites
 - An active Google Cloud Platform (GCP) account.
 - Compute Engine API enabled
 - An existing Instance Template (with a working startup script and `http-server` tag)
 - `gcloud auth application-default-login` already run
+
 ### Procedure
 #### 1. Start the MIG creation flow
 - Go to **Compute Engine** then **Instance Groups**
@@ -82,7 +84,6 @@ Deploy a Managed Instance Group (MIG) of identical VMs distributed across multip
 - Leave all other settings at defaults
 - Click **Create**
 
-
 ### Verification
 #### Check for multi-zone distribution
 After creation, open the instance group. VMs should be spread across `a`,`b`,`c`.
@@ -95,10 +96,35 @@ The Health check column should show health-check name. After a few minutes, all 
 2. Wait 2‑3 minutes
 3. Refresh the page – a new VM will appear, and its health status will become green
 In the example below, I deleted the VM ending in “5rkd.” As the VM was being deleted, a new VM ending in “0txd” was automatically created and began booting up.
-
+![VM Delete to New VM](./Screenshots/Delete_Instance_New_Instance.png)
 
 ---
 ## Terraform
 
 ### Mandatory (Required) Arguments for a Google Compute Engine VM
-The following arguments
+The following arguments must be defined in a `google_comute_instance` resource for Terraform to successfully create a VM:
+
+`name` - Give this resource a unique name as GCE needs one. If you change the name later, the old resource will be deleted and a new one will take its place.
+
+`machine_type` - This is where you pick your hardware 'size' (vCPUs and RAM), like an `n2-standard-2`. The machine family (N2, N1, E2) is what decides how fast your setup runs and how much it’ll cost you.
+
+`boot_disk` - This block sets up your main hard drive. At the very least, you’ll need to use `initialize_params` to tell the system which 'image' to use, basically, which OS (like Debian or Ubuntu) you want pre-installed.
+
+`network_interface` - This block that connects the VM to a VPC network. Without it, the VM cannot communicate with other resources or the internet. To get a public IP, make sure to add that `access_config` section (even if empty).
+
+`zone` - Defines which GCP zone (e.g., `us-central1-a`) the VM will run in. Even though `zone` is technically optional, it is a best practice to always include the `zone` argument directly in the VM resource. If it is not provided, the provider zone is used.
+
+https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance
+
+### Outputting Internal and External IP Addresses
+
+**Internal IP**
+`google_compute_instance.vm_name.network_interface[0].network_ip`
+Your VM's main network card always gets its own internal IP address. The subnet just automatically hands one out as soon as the VM is made.
+(https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#network_ip-1)
+
+**External IP**
+`google_compute_instance.vm_name.network_interface[0].access_config[0].nat_ip`
+The `access_config` block is basically a middleman that maps your VM to a public IP. Whether that IP is a temporary one (ephemeral) or one you've kept on reserve (static), this is the bit that links them together.
+(https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#nat_ip-1)
+
